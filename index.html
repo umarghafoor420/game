@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Egg Hatch Flappy - Mobile Ready</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #333;
+            font-family: 'Arial', sans-serif;
+            overflow: hidden; /* Scroll band */
+            touch-action: none; /* Mobile par pull-to-refresh band */
+        }
+
+        canvas {
+            display: block;
+            border: 2px solid #ffd700;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+            background-size: cover;
+            background-position: center;
+        }
+
+        .assets { display: none; }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div class="assets">
+        <img id="eggImg" src="egg.png" alt="egg" onerror="this.src='https://cdn-icons-png.flaticon.com/512/528/528166.png'">
+        <img id="birdImg" src="boy.jpg" alt="bird" onerror="this.src='https://cdn-icons-png.flaticon.com/512/1144/1144760.png'">
+        <img id="bananaImg" src="banana.jpeg" alt="banana" onerror="this.src='https://clipart-library.com/images_k/banana-transparent-background/banana-transparent-background-15.png'">
+        <img id="bgImgSrc" src="background_man.jpg" alt="background" onerror="this.src='https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=1000&auto=format&fit=crop'">
+        
+        <img id="win1" src="winner1.jpg" alt="win1" onerror="this.src='https://cdn-icons-png.flaticon.com/512/744/744984.png'">
+        <img id="win2" src="winner2.jpg" alt="win2" onerror="this.src='https://cdn-icons-png.flaticon.com/512/616/616490.png'">
+        <img id="win3" src="winner3.jpg" alt="win3" onerror="this.src='https://cdn-icons-png.flaticon.com/512/7656/7656139.png'">
+
+        <audio id="hatchSound" src="hatch.mp3"></audio>
+        <audio id="jumpSound" src="jump.mp3"></audio>
+        <audio id="winSound" src="win_music.mp3"></audio> 
+        <audio id="hitSpecialSound" src="crash.mp3"></audio>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        // --- TITLES ---
+        const WIN_TITLE_1 = "Gull Bund Mare maderchod";   
+        const WIN_TITLE_2 = "Rauf Gandmare kuss ka dhakan";        
+        const WIN_TITLE_3 = "Arsal=Datla Maderchod=akbar kuss ka dhkan";      
+        // --------------
+
+        // --- RESPONSIVE RESIZE LOGIC ---
+        function resizeCanvas() {
+            // Mobile logic: Full height, but limit width to keep game playable
+            let height = window.innerHeight;
+            let width = Math.min(window.innerWidth, 480); // Max width 480px for better gameplay
+            
+            canvas.width = width;
+            canvas.height = height; // Use full available height
+        }
+        
+        // Listen for screen resize (rotate etc.)
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // --- ASSETS LOADING ---
+        const eggSprite = document.getElementById("eggImg"); 
+        const birdSprite = document.getElementById("birdImg");
+        const bananaSprite = document.getElementById("bananaImg");
+        const bgImageSource = document.getElementById("bgImgSrc");
+        
+        const winSprite1 = document.getElementById("win1");
+        const winSprite2 = document.getElementById("win2");
+        const winSprite3 = document.getElementById("win3");
+        
+        const hatchAudio = document.getElementById("hatchSound"); 
+        const jumpAudio = document.getElementById("jumpSound");   
+        const winAudio = document.getElementById("winSound");
+        const hitSpecialAudio = document.getElementById("hitSpecialSound");
+
+        bgImageSource.onload = function() { canvas.style.backgroundImage = `url('${bgImageSource.src}')`; };
+        if (bgImageSource.complete) { canvas.style.backgroundImage = `url('${bgImageSource.src}')`; }
+
+        // --- VARIABLES ---
+        let frames = 0;
+        let score = 0;
+        const WIN_SCORE = 2; 
+        let winFrameStart = 0;
+        let crashFrameStart = 0; 
+
+        const state = {
+            current: 0,
+            getReady: 0,
+            game: 1,
+            over: 2,
+            won: 3
+        };
+
+        // --- CONTROLS ---
+        function flapAction(evt) {
+            // Prevent default touch behavior (scrolling/zooming)
+            if(evt.type === 'touchstart') evt.preventDefault();
+
+            switch(state.current){
+                case state.getReady:
+                    state.current = state.game;
+                    try { hatchAudio.play(); } catch(e){} 
+                    bird.flap();
+                    break;
+                case state.game:
+                    bird.flap();
+                    try { 
+                        jumpAudio.currentTime = 0; 
+                        jumpAudio.play(); 
+                    } catch(e){}
+                    break;
+                case state.over:
+                case state.won:
+                    if((frames - winFrameStart > 100 && state.current == state.won) || 
+                       (frames - crashFrameStart > 80 && state.current == state.over)) {
+                        resetGame();
+                    }
+                    break;
+            }
+        }
+
+        canvas.addEventListener("click", flapAction);
+        canvas.addEventListener("touchstart", flapAction, {passive: false});
+        window.addEventListener("keydown", function(e){
+            if(e.code === 'Space') flapAction(e);
+        });
+
+        // --- OBJECTS ---
+        const bird = {
+            x: 50,
+            y: canvas.height / 2,
+            w: 50,
+            h: 50,
+            radius: 25,
+            speed: 0,
+            gravity: 0.25,
+            jump: 5.5,
+            
+            draw: function() {
+                if(state.current == state.over) return; 
+
+                let spriteToDraw = (state.current == state.getReady) ? eggSprite : birdSprite;
+
+                ctx.save();
+                if(state.current == state.game) {
+                    ctx.translate(this.x + this.w/2, this.y + this.h/2);
+                    let rotation = Math.min(Math.PI / 4, Math.max(-Math.PI / 4, (this.speed * 0.1)));
+                    ctx.rotate(rotation);
+                    ctx.translate(-(this.x + this.w/2), -(this.y + this.h/2));
+                }
+
+                if (spriteToDraw.complete && spriteToDraw.naturalWidth !== 0) {
+                      if(state.current == state.getReady) {
+                          let eggSize = 100; 
+                          let offset = (eggSize - this.w) / 2; 
+                          ctx.drawImage(spriteToDraw, this.x - offset, this.y - offset, eggSize, eggSize);
+                      } else {
+                          if(state.current == state.game || state.current == state.won) {
+                            ctx.beginPath();
+                            ctx.arc(this.x + this.radius, this.y + this.radius, this.radius, 0, Math.PI * 2, true);
+                            ctx.closePath();
+                            ctx.clip();
+                          }
+                          ctx.drawImage(spriteToDraw, this.x, this.y, this.w, this.h);
+                      }
+                } else {
+                      ctx.fillStyle = (state.current == state.getReady) ? "white" : "red";
+                      ctx.beginPath();
+                      ctx.arc(this.x + this.radius, this.y + this.radius, (state.current == state.getReady ? 40 : this.radius), 0, Math.PI * 2);
+                      ctx.fill();
+                }
+                ctx.restore();
+            },
+            
+            update: function() {
+                if(state.current !== state.game && state.current !== state.getReady) return;
+
+                if(state.current == state.game) {
+                    this.speed += this.gravity;
+                    this.y += this.speed;
+
+                    // Floor collision logic updated for dynamic height
+                    if(this.y + this.h >= canvas.height || this.y <= 0) {
+                        gameOver();
+                    }
+                }
+            },
+            
+            flap: function() {
+                this.speed = -this.jump;
+            },
+
+            reset: function() {
+                this.speed = 0;
+                this.y = canvas.height / 2;
+            }
+        }
+
+        const pipes = {
+            position: [],
+            w: 60,
+            h: 300, // Fixed height reference, drawn dynamically
+            gap: 140,
+            dx: 3,
+            
+            draw: function() {
+                for(let i = 0; i < this.position.length; i++) {
+                    let p = this.position[i];
+                    let topY = p.y;
+                    let bottomY = p.y + this.h + this.gap;
+
+                    // Top Pipe
+                    ctx.drawImage(bananaSprite, p.x, topY, this.w, this.h);
+                    
+                    // Bottom Pipe (Fills remaining height)
+                    let bottomPipeHeight = canvas.height - bottomY;
+                    ctx.drawImage(bananaSprite, p.x, bottomY, this.w, bottomPipeHeight);
+                }
+            },
+
+            update: function() {
+                if(state.current !== state.game) return;
+
+                if(frames % 100 == 0) {
+                    // Random Y position logic considering dynamic height
+                    let maxY = -50;
+                    let minY = canvas.height - this.h - this.gap - 50;
+                    // Prevent pipes from being impossible
+                    if (minY < maxY) minY = maxY; 
+                    
+                    this.position.push({
+                        x: canvas.width,
+                        y: Math.floor(Math.random() * (minY - maxY + 1) + maxY)
+                    });
+                }
+
+                for(let i = 0; i < this.position.length; i++) {
+                    let p = this.position[i];
+                    p.x -= this.dx;
+                    
+                    let bottomPipeY = p.y + this.h + this.gap;
+                    let birdLeft = bird.x + 5;
+                    let birdRight = bird.x + bird.w - 5;
+                    let birdTop = bird.y + 5;
+                    let birdBottom = bird.y + bird.h - 5;
+
+                    // Collision Logic
+                    if (birdRight > p.x && birdLeft < p.x + this.w && birdTop < p.y + this.h) gameOver();
+                    if (birdRight > p.x && birdLeft < p.x + this.w && birdBottom > bottomPipeY) gameOver();
+
+                    if(p.x + this.w <= 0) {
+                        this.position.shift();
+                        score++;
+                        if(score >= WIN_SCORE) gameWin();
+                    }
+                }
+            },
+            
+            reset: function() {
+                this.position = [];
+            }
+        }
+
+        function gameOver() {
+            state.current = state.over;
+            crashFrameStart = frames; 
+            try { 
+                hitSpecialAudio.currentTime = 0;
+                hitSpecialAudio.play(); 
+            } catch(e){}
+        }
+
+        function gameWin() {
+            state.current = state.won;
+            winFrameStart = frames; 
+            try { winAudio.play(); } catch(e){}
+        }
+
+        function resetGame() {
+            bird.reset();
+            pipes.reset();
+            score = 0;
+            frames = 0;
+            state.current = state.getReady;
+            try { 
+                winAudio.pause(); winAudio.currentTime = 0; 
+                hitSpecialAudio.pause(); hitSpecialAudio.currentTime = 0;
+            } catch(e){}
+        }
+
+        function getLines(ctx, text, maxWidth) {
+            var words = text.split(" ");
+            var lines = [];
+            var currentLine = words[0];
+            for (var i = 1; i < words.length; i++) {
+                var word = words[i];
+                var width = ctx.measureText(currentLine + " " + word).width;
+                if (width < maxWidth) { currentLine += " " + word; } 
+                else { lines.push(currentLine); currentLine = word; }
+            }
+            lines.push(currentLine);
+            return lines;
+        }
+
+        function drawAnimatedImageWithTitle(img, title, delay, x, y, maxW) {
+            let elapsed = frames - winFrameStart;
+            if (elapsed < delay) return; 
+            let progress = (elapsed - delay) / 30;
+            if (progress > 1) progress = 1;
+            let scale = progress; 
+            let w = maxW * scale;
+            let h = maxW * scale; 
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.drawImage(img, -w/2, -h/2, w, h);
+            if(progress > 0.8) {
+                ctx.font = "bold 14px Arial"; 
+                let maxTextWidth = 140; 
+                let lines = getLines(ctx, title, maxTextWidth);
+                let lineHeight = 18;
+                let totalHeight = lines.length * lineHeight;
+                let padding = 5;
+                ctx.fillStyle = "white";
+                ctx.strokeStyle = "black";
+                ctx.lineWidth = 1;
+                let boxTop = h/2 + 5;
+                let boxLeft = -maxTextWidth/2 - padding;
+                let boxW = maxTextWidth + (padding*2);
+                let boxH = totalHeight + (padding*2);
+                ctx.fillRect(boxLeft, boxTop, boxW, boxH);
+                ctx.strokeRect(boxLeft, boxTop, boxW, boxH);
+                ctx.fillStyle = "black";
+                ctx.textAlign = "center";
+                ctx.shadowBlur = 0; 
+                for(let i=0; i<lines.length; i++) {
+                    ctx.fillText(lines[i], 0, boxTop + padding + lineHeight - 4 + (i*lineHeight));
+                }
+            }
+            ctx.restore();
+        }
+
+        // --- FAST CRASH ANIMATION (1 second) ---
+        function drawCrashAnimation() {
+            let elapsed = frames - crashFrameStart;
+            let duration = 60; 
+            
+            let progress = elapsed / duration;
+            if (progress > 1) progress = 1;
+
+            let startY = canvas.height + 250; 
+            let endY = canvas.height / 2;
+            
+            let currentY = startY - ((startY - endY) * progress);
+            let size = 350; 
+
+            ctx.save();
+            ctx.translate(canvas.width/2, currentY);
+            ctx.drawImage(birdSprite, -size/2, -size/2, size, size);
+            ctx.restore();
+        }
+
+        function drawScoreAndUI() {
+            ctx.fillStyle = "#FFF";
+            ctx.strokeStyle = "#000";
+            ctx.textAlign = "center";
+            ctx.shadowBlur = 0; 
+            
+            if(state.current == state.game) {
+                ctx.lineWidth = 2;
+                ctx.font = "50px Impact";
+                ctx.fillText(score, canvas.width/2, 80);
+                ctx.strokeText(score, canvas.width/2, 80);
+
+            } else if (state.current == state.over) {
+                ctx.fillStyle = "rgba(0,0,0,0.8)";
+                ctx.fillRect(0,0,canvas.width, canvas.height);
+                drawCrashAnimation();
+
+            } else if (state.current == state.won) {
+                ctx.fillStyle = "rgba(0,0,0,0.85)";
+                ctx.fillRect(0,0,canvas.width, canvas.height);
+                drawAnimatedImageWithTitle(winSprite1, WIN_TITLE_1, 0, canvas.width/2, canvas.height/2 - 150, 180);
+                drawAnimatedImageWithTitle(winSprite2, WIN_TITLE_2, 30, canvas.width/2 - 100, canvas.height/2 + 60, 150);
+                drawAnimatedImageWithTitle(winSprite3, WIN_TITLE_3, 60, canvas.width/2 + 100, canvas.height/2 + 60, 150);
+                if(frames - winFrameStart > 80) {
+                    ctx.fillStyle = "gold";
+                    ctx.strokeStyle = "black";
+                    ctx.lineWidth = 3;
+                    ctx.font = "60px Impact";
+                    ctx.shadowColor = "black";
+                    ctx.shadowBlur = 15;
+                    ctx.fillText("YOU WIN!", canvas.width/2, 100);
+                    ctx.strokeText("YOU WIN!", canvas.width/2, 100);
+                    ctx.shadowBlur = 0;
+                    ctx.fillStyle = "white";
+                    ctx.font = "20px Arial";
+                    ctx.fillText("Click to Play Again", canvas.width/2, canvas.height - 50);
+                }
+            } else if (state.current == state.getReady) {
+                ctx.fillStyle = "white";
+                ctx.font = "25px Impact";
+                ctx.fillText("TAP TO HATCH!", canvas.width/2, canvas.height/2 - 20);
+                ctx.font = "15px Arial";
+                ctx.fillText("Click to crack the egg", canvas.width/2, canvas.height/2 + 10);
+            }
+        }
+
+        function loop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            pipes.draw();
+            pipes.update();
+            bird.draw();
+            bird.update();
+            drawScoreAndUI();
+            frames++;
+            requestAnimationFrame(loop);
+        }
+        loop();
+
+    </script>
+</body>
+</html>
