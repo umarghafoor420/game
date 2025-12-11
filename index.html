@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Egg Hatch Flappy - Mobile Ready</title>
+    <title>Egg Hatch Flappy - 10 Rounds</title>
     <style>
         body {
             margin: 0;
@@ -55,21 +55,18 @@
 
         // --- TITLES ---
         const WIN_TITLE_1 = "Gull Bund Mare maderchod";   
-        const WIN_TITLE_2 = "Arsal=Datla Maderchod=akbar kuss ka dhkan";        
-        const WIN_TITLE_3 = "Rauf Gandmare kuss ka dhakan";      
+        const WIN_TITLE_2 = "Rauf Gandmare kuss ka dhakan";        
+        const WIN_TITLE_3 = "Arsal=Datla Maderchod=akbar kuss ka dhkan";      
         // --------------
 
         // --- RESPONSIVE RESIZE LOGIC ---
         function resizeCanvas() {
-            // Mobile logic: Full height, but limit width to keep game playable
             let height = window.innerHeight;
-            let width = Math.min(window.innerWidth, 480); // Max width 480px for better gameplay
-            
+            let width = Math.min(window.innerWidth, 480); 
             canvas.width = width;
-            canvas.height = height; // Use full available height
+            canvas.height = height; 
         }
         
-        // Listen for screen resize (rotate etc.)
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
 
@@ -94,7 +91,10 @@
         // --- VARIABLES ---
         let frames = 0;
         let score = 0;
-        const WIN_SCORE = 2; 
+        
+        // *** CHANGE: WIN SCORE IS NOW 10 ***
+        const WIN_SCORE = 10; 
+        
         let winFrameStart = 0;
         let crashFrameStart = 0; 
 
@@ -108,7 +108,6 @@
 
         // --- CONTROLS ---
         function flapAction(evt) {
-            // Prevent default touch behavior (scrolling/zooming)
             if(evt.type === 'touchstart') evt.preventDefault();
 
             switch(state.current){
@@ -194,7 +193,6 @@
                     this.speed += this.gravity;
                     this.y += this.speed;
 
-                    // Floor collision logic updated for dynamic height
                     if(this.y + this.h >= canvas.height || this.y <= 0) {
                         gameOver();
                     }
@@ -214,7 +212,7 @@
         const pipes = {
             position: [],
             w: 60,
-            h: 300, // Fixed height reference, drawn dynamically
+            h: 300, 
             gap: 140,
             dx: 3,
             
@@ -224,10 +222,8 @@
                     let topY = p.y;
                     let bottomY = p.y + this.h + this.gap;
 
-                    // Top Pipe
                     ctx.drawImage(bananaSprite, p.x, topY, this.w, this.h);
                     
-                    // Bottom Pipe (Fills remaining height)
                     let bottomPipeHeight = canvas.height - bottomY;
                     ctx.drawImage(bananaSprite, p.x, bottomY, this.w, bottomPipeHeight);
                 }
@@ -237,10 +233,8 @@
                 if(state.current !== state.game) return;
 
                 if(frames % 100 == 0) {
-                    // Random Y position logic considering dynamic height
                     let maxY = -50;
                     let minY = canvas.height - this.h - this.gap - 50;
-                    // Prevent pipes from being impossible
                     if (minY < maxY) minY = maxY; 
                     
                     this.position.push({
@@ -259,7 +253,6 @@
                     let birdTop = bird.y + 5;
                     let birdBottom = bird.y + bird.h - 5;
 
-                    // Collision Logic
                     if (birdRight > p.x && birdLeft < p.x + this.w && birdTop < p.y + this.h) gameOver();
                     if (birdRight > p.x && birdLeft < p.x + this.w && birdBottom > bottomPipeY) gameOver();
 
@@ -354,7 +347,6 @@
             ctx.restore();
         }
 
-        // --- FAST CRASH ANIMATION (1 second) ---
         function drawCrashAnimation() {
             let elapsed = frames - crashFrameStart;
             let duration = 60; 
@@ -434,5 +426,4 @@
 
     </script>
 </body>
-
 </html>
